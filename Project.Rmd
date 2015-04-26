@@ -1,0 +1,79 @@
+---
+title: "MLProject"
+author: "Roman Rudenskyy"
+---
+
+Loading and Reading data
+
+```{r}
+if (sum(grepl("tr.csv", dir()))==0) download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="tr.csv")
+if (sum(grepl("tst.csv", dir()))==0) download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="tst.csv")
+training<-read.csv("tr.csv")
+testing<-read.csv("tst.csv")
+names(training)
+```
+
+
+Subsetting datasets
+For solving our classification problem we'll explore some set of models on two datasets. The first dataset will consist of roll, pitch, yaw and total_accel data, i.e. columns which names start with these words.
+The second dataset will consist of accel, magnet and gyros data.
+
+
+```{r}
+names2extr1<-names(training)[grepl("^roll_|^pitch_|^yaw_|^total_|^classe",names(training))]
+names2extrtst1<-names(testing)[grepl("^roll_|^pitch_|^yaw_|^total_",names(testing))]
+names2extr2<-names(training)[grepl("^gyros_|^accel_|^magnet_|^classe",names(training))]
+names2extrtst2<-names(testing)[grepl("^gyros_|^accel_|^magnet_",names(testing))]
+trn1<-training[,names2extr1]
+trn2<-training[,names2extr2]
+tst1<-testing[,names2extrtst1]
+tst2<-testing[,names2extrtst2]
+```
+
+For both datasets we'll make training and testing samples and fit models using following methods:
+Linear Discriminant Analysis (lda), 
+Decision Trees (rpart),  
+Random Forests (rf),  
+
+For making the best model we'll be taking a random proportion of data (say 70%) to train a model while the remainder will be used for prediction. As the measure of model's accuracy at each step we will use "the worst" accuracy that produces model on predicting set of data. This process will be repeated 20 times and average "worst accuracy" for each model will be determined. The best model is the one which is "most accurate" with respect to average "worst accuracy". I.e. this is the model that is going to classify data with the most average guaranteed accuracy.
+For Random forests is time consuming method we will not run it recursively and just will apply only on two datasets.
+The following R code is to perform described procedures.
+
+```{r}
+library(caret)
+methods<-c("lda","rpart", "rf")
+avaccmdl1<-0
+avaccmdl2<-0
+for (i in 1:2) {
+  print(i)
+  for (j in 1:10){
+    print(j)
+    inTrain1<-createDataPartition(y=trn1$classe,p=0.7,list=F)
+    inTrain2<-createDataPartition(y=trn1$classe,p=0.7,list=F)
+    trsam1<-trn1[inTrain1,]
+    trsam2<-trn2[inTrain2,]
+    tstsam1<-trn1[-inTrain1,]
+    tstsam2<-trn2[-inTrain2,]
+    mdl1<-train(y=trsam1[,17],x=trsam1[,-17],method=methods[i])
+    mdl2<-train(y=trsam2[,37],x=trsam2[,-37],method=methods[i])
+    accmdl1[j]<-min(confusionMatrix(predict(mdl1,tstsam1[,-17]),tstsam1[,17])[[4]][,8])
+    accmdl2[j]<-min(confusionMatrix(predict(mdl2,tstsam2[,-37]),tstsam2[,37])[[4]][,8])
+  }
+avaccmdl1[i]<-mean(accmdl1)
+avaccmdl2[i]<-mean(accmdl2)
+}
+ mdlrf1<-train(y=trsam1[,17],x=trsam1[,-17],method=methods[3])
+ mdlrf2<-train(y=trsam2[,37],x=trsam2[,-37],method=methods[3])
+avaccmdl1[3]<-min(confusionMatrix(predict(mdlrf1,tstsam1[,-17]),tstsam1[,17])[[4]][,8])
+avaccmdl2[3]<-min(confusionMatrix(predict(mdlrf2,tstsam2[,-37]),tstsam2[,37])[[4]][,8])
+names(avaccmdl1)<-methods
+names(avaccmdl2)<-methods
+(avaccmdl1)
+(avaccmdl2)
+```
+
+So, as one can see the best predictions on both subsets were achieved using the Random Forest method. Using this method we are expecting the averarge accuracy of classification to be no less then 0.988. Particularly, expected accuracy for different classes is the following:
+
+```{r}
+confusionMatrix(predict(mdlrf2,tstsam2[,-37]),tstsam2[,37])[[4]][,8]
+```
